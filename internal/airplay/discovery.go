@@ -299,12 +299,26 @@ func (i *ReceiverInfo) SupportsFairPlaySAP() bool {
 	return i != nil && i.Features&FeatureFPSAP25 != 0
 }
 
+// isLegacyAppleReceiver reports Apple TVs whose audio path still uses the
+// original RAOP jitter buffer. They advertise FairPlay SAP, but that bit is
+// not a usable stand-in for "modern, large audio buffer".
+func (i *ReceiverInfo) isLegacyAppleReceiver() bool {
+	if i == nil {
+		return false
+	}
+	return strings.HasPrefix(i.Model, "AppleTV2,") || strings.HasPrefix(i.Model, "AppleTV3,")
+}
+
 // playoutLatencyFloor returns the minimum playout lead this receiver needs.
 // Modern Apple receivers advertise FairPlay SAP and have robust audio jitter
-// buffers, so they can play at very low latency (floor 0). Receivers without it
-// (Roku and other third-party AirPlay implementations) need a conservative lead
-// or they drop audio they can no longer schedule.
+// buffers, so they can play at very low latency (floor 0). AppleTV2/3 still
+// use the original RAOP buffer and need the smaller legacy floor. Third-party
+// receivers without FairPlay SAP (Roku and similar) need the conservative
+// lead or they drop audio they can no longer schedule.
 func (i *ReceiverInfo) playoutLatencyFloor() time.Duration {
+	if i != nil && i.isLegacyAppleReceiver() {
+		return legacyApplePlayoutLatency
+	}
 	if i != nil && i.SupportsFairPlaySAP() {
 		return 0
 	}
